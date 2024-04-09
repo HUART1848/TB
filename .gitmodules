@@ -1,3 +1,6 @@
 [submodule "llama.cpp"]
 	path = llama.cpp
 	url = https://github.com/ggerganov/llama.cpp
+[submodule "discourse-mt-test-sets"]
+	path = discourse-mt-test-sets
+	url = https://github.com/rbawden/discourse-mt-test-sets
