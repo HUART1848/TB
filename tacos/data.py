@@ -1,4 +1,5 @@
 import json
+import random
 
 class ContextSentence():
     pre: str = ...
@@ -20,6 +21,31 @@ class ComparisonExample():
         self.src = src
         self.trg_correct = trg_correct
         self.trg_incorrect = trg_incorrect
+
+    def to_prompt(self, shuffle=True) -> tuple[int, str]:
+        """
+        Returns a formatted prompt with the position of the correct sentence (1 or 2)
+        """
+        ret = f"""
+        You will decide wich of two translations from english to french is the most correct one.
+        The context of the original sentence is '{self.src.pre}'
+        The original sentence is '{self.src.sen}'
+        The context translated in french is '{self.trg_correct.pre}'
+        Which of the following is correct? Answer only with '1' or '2'"""
+
+        order = random.randint(1, 2) if shuffle else 1
+        if order == 1:
+            ret += f"""
+            1. '{self.trg_correct.sen}'
+            2. '{self.trg_incorrect.sen}' 
+            """
+        else:
+            ret += f"""
+            1. '{self.trg_incorrect.sen}'
+            2. '{self.trg_correct.sen}' 
+            """
+
+        return (order, ret)
     
 class ComparisonTestSet():
     src_lang: str = ...
