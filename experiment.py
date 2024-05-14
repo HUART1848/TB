@@ -7,7 +7,6 @@ from tqdm import tqdm
 
 from pprint import pprint
 from tacos.data import DiscourseMTLoader
-from tacos.prompt import SimpleENFRPromptFormatter
 
 def simple_comparison_mistral():
     path = "discourse-mt-test-sets/test-sets/anaphora.json"
