@@ -1,0 +1,3 @@
+mistral aff shuffle:   0.695
+mistral aff noshuffle: 0.695
+nllb    aff          : 0.51
