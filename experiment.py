@@ -1,4 +1,3 @@
-import gc
 import json
 import tiktoken
 import torch
@@ -110,8 +109,7 @@ def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Mod
         prompt = res["prompts"][0]
         trues.append(res["true"])
 
-        pred = model.get_completion(prompt=prompt, max_tokens=2)
-
+        pred = model.get_completion(prompt=prompt, max_tokens=None)["choices"][0]["message"]["content"]
         try:
             preds.append(int("".join(filter(str.isdigit, pred))))
         except ValueError:
@@ -142,13 +140,10 @@ def likelihood_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model, tok
     return accuracy_score(trues, preds)
 
 def comparison_experiments():
-    models = [
+    models: list[Model] = [
         Llama3InstructModel(),
-        MistralInstructModel()
+        MistralInstructModel(),
     ]
-
-    for m in models:
-        m.load()
 
     loader = DiscourseMTLoader()
     testsets = {
@@ -162,12 +157,14 @@ def comparison_experiments():
 
     results = []
     for model in models:
+        model.load(n_threads=24)
         for testsetname, testset in testsets.items():
             for p in params["translate_context"]:
-                print(f"MODEL: {model.__class__.__name__}")
-
                 fmt = ENFRChoiceFormatter(translate_context=True)
+
+                print(f"MODEL: {model.__class__.__name__}")
                 print(f"FMT: {fmt.__class__.__name__}")
+
                 trues, preds = comparison_eval(testset, fmt, model)
                 print(confusion_matrix(trues, preds))
 
@@ -187,13 +184,11 @@ def comparison_experiments():
                 pprint(result)
                 results.append(result)
             break
-        del model
-        del tokenizer
-
-        gc.collect()
-        torch.cuda.empty_cache()
-    
+        model.unload()
+            
     pprint(results)
+    with open(f"""results-{datetime.now().strftime("%Y-%m-%d_%H%M%S")}.json""", "w") as f:
+        f.write(json.dumps(results))
 
 def likelihood_experiments():
     pass

@@ -14,12 +14,13 @@ class Model:
     
 
 class MistralInstructModel(Model):
-    MODEL_PATH = "mistralai/Mistral-7B-Instruct-v0.2"
+    MODEL_PATH = "./models/mistral/mistral-7B-Q4_K_M.gguf"
     
     model = None
 
-    def load(self, verbose: bool=False):
-        self.model = Llama("./models/mistral/mistral-7B-Q4_K_M.gguf", verbose=verbose)
+
+    def load(self, verbose: bool=False, n_threads=16):
+        self.model = Llama(model_path=self.MODEL_PATH, verbose=verbose, n_threads=n_threads, n_threads_batch=n_threads)
 
     def unload(self):
         del self.model
@@ -29,15 +30,17 @@ class MistralInstructModel(Model):
         if self.model is None:
             raise RuntimeError("Model is not loaded")
         
-        return(self.model(prompt, max_tokens=10))
+        message = [{"role": "user", "content": prompt}]
+        ret = self.model.create_chat_completion(messages=message, max_tokens=max_tokens, stop=["END"])
+        return ret
 
 class Llama3InstructModel(Model):
-    MODEL_PATH = "./models/llama3/llama3-8B-Instruct-Q4_K_M.gguf"
+    MODEL_PATH = "./models/llama3/ggml-model-f16.gguf"
     
     model = None
 
-    def load(self, verbose: bool=False):
-        self.model = Llama(self.MODEL_PATH, verbose=verbose)
+    def load(self, verbose: bool=False, n_threads=16):
+        self.model = Llama(model_path=self.MODEL_PATH, verbose=verbose, n_threads=n_threads, n_threads_batch=n_threads)
 
     def unload(self):
         del self.model
@@ -47,4 +50,6 @@ class Llama3InstructModel(Model):
         if self.model is None:
             raise RuntimeError("Model is not loaded")
         
-        return(self.model(prompt, max_tokens=max_tokens))
+        message = [{"role": "user", "content": prompt}]
+        ret = self.model.create_chat_completion(messages=message, max_tokens=max_tokens, stop=["END"])
+        return ret

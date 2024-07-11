@@ -28,8 +28,10 @@ class ENFRChoiceFormatter(PromptFormatter):
         You will decide which of two translations from English to French is the most correct one.
         The context of the source sentence is '{example.src.pre}'
         The source sentence is '{example.src.sen}'
-        The context translated in French is '{context}'
-        Which of the following translations is correct? Answer only with '1' or '2'"""
+        {context}
+        Which of the following translations is correct? MAKE SURE you only answer with the following manner:
+        START,choice=(1 or 2),END
+        """
 
         order = random.randint(1, 2) if shuffle else 1
         if order == 1:
