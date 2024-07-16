@@ -16,7 +16,7 @@ class Model:
 class MistralInstructModel(Model):
     MODEL_PATH = "./models/mistral/mistral-7B-Q4_K_M.gguf"
     
-    model = None
+    model: Llama = None
 
 
     def load(self, verbose: bool=False, n_threads=16):
@@ -35,7 +35,7 @@ class MistralInstructModel(Model):
         return ret
 
 class Llama3InstructModel(Model):
-    MODEL_PATH = "./models/llama3/ggml-model-f16.gguf"
+    MODEL_PATH = "./models/llama3/llama3-8B-Q4_K_M.gguf"
     
     model = None
 

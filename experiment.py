@@ -1,6 +1,7 @@
+import itertools
 import json
+import re
 import tiktoken
-import torch
 
 from datetime import datetime
 from openai import OpenAI
@@ -101,19 +102,42 @@ def f2():
 
     print(accuracy_score(trues, preds))
 
-def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Model):
+def params_product(**params):
+    keys = params.keys()
+    for instance in itertools.product(*params.values()):
+        yield dict(zip(keys, instance))
+
+def append_to_file(filename: str, content: str):
+    with open(filename, "a") as f:
+        f.write(content)
+
+def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Model, save_outputs=None):
     trues = []
     preds = []
+    
     for example in tqdm(testset.examples):
         res = fmt.format(example)
         prompt = res["prompts"][0]
         trues.append(res["true"])
+        output = model.get_completion(prompt=prompt, max_tokens=None)["choices"][0]["message"]["content"]
 
-        pred = model.get_completion(prompt=prompt, max_tokens=None)["choices"][0]["message"]["content"]
+        pred = 0
         try:
-            preds.append(int("".join(filter(str.isdigit, pred))))
+            matched = re.search(r"choice=(\d+)", output)
+            pred = 0 if matched is None else int(matched.group(1))
         except ValueError:
-            preds.append(0)
+            pass
+
+        preds.append(pred)
+        
+        if save_outputs is not None:
+            content = {
+                "prompt": prompt,
+                "output": output,
+                "true": res["true"],
+                "pred": pred
+            }
+            append_to_file(save_outputs, json.dumps(content) + "\n")
 
     return trues, preds
 
@@ -141,8 +165,8 @@ def likelihood_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model, tok
 
 def comparison_experiments():
     models: list[Model] = [
-        Llama3InstructModel(),
         MistralInstructModel(),
+        #Llama3InstructModel(),
     ]
 
     loader = DiscourseMTLoader()
@@ -151,43 +175,59 @@ def comparison_experiments():
         "lexical-choice": loader.comparison_from_lexical_choice("./discourse-mt-test-sets/test-sets/lexical-choice.json")
     }
     
-    params = {
-        "translate_context": [False, True]
+    all_params = {
+            "anaphora": {
+                "translate_context": [False],
+                "explanation_instructions": [
+                    None,
+                    "What does the pronoun refers to in the sentence you chose?",
+                ]
+        },
+            "lexical-choice": {
+                "translate_context": [False],
+                "explanation_instructions": [
+                    None,
+                    "Why did you not chose the other word?"
+                ]   
+        }
     }
+
+    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+    results_filename = f"""results-{timestamp}.json"""
 
     results = []
     for model in models:
-        model.load(n_threads=24)
+        model.load(n_threads=96)
         for testsetname, testset in testsets.items():
-            for p in params["translate_context"]:
-                fmt = ENFRChoiceFormatter(translate_context=True)
+            params = all_params[testsetname]
+            for i, p in enumerate(params_product(**params)):
+                fmt = ENFRChoiceFormatter(**p)
 
                 print(f"MODEL: {model.__class__.__name__}")
+                print(f"TESTSET: {testsetname}")
                 print(f"FMT: {fmt.__class__.__name__}")
+                print(f"PARAMS:")
+                pprint(p)
 
-                trues, preds = comparison_eval(testset, fmt, model)
-                print(confusion_matrix(trues, preds))
+                metadata_filename = f"""outputs-{model.__class__.__name__}-{testsetname}-{timestamp}-metadata.jsonl"""
+                append_to_file(metadata_filename, json.dumps({"id": i, "params": p}) + "\n")
 
-                for i in range(0, 3):
-                    print(f"{i} : {sum([pred for pred in preds if pred == i])}")
-
-                for i in range(0, 3):
-                    print(f"{i} : {sum([tr for tr in trues if tr == i])}")
+                outputs_filename = f"""outputs-{model.__class__.__name__}-{testsetname}-{timestamp}-{i}.jsonl"""
+                trues, preds = comparison_eval(testset, fmt, model, save_outputs=outputs_filename)
 
                 result = {
                     "model": model.__class__.__name__,
                     "testset": testsetname,
-                    "translate_context": p,
-                    "accuracy": accuracy_score(trues, preds)
+                    "params": p,
+                    "accuracy": accuracy_score(trues, preds),
+                    "failed": sum(filter(lambda p: p not in [1, 2], preds))
                 }
 
-                pprint(result)
                 results.append(result)
-            break
         model.unload()
             
     pprint(results)
-    with open(f"""results-{datetime.now().strftime("%Y-%m-%d_%H%M%S")}.json""", "w") as f:
+    with open(results_filename, "w") as f:
         f.write(json.dumps(results))
 
 def likelihood_experiments():

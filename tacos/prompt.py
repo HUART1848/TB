@@ -15,40 +15,47 @@ class PromptFormatter():
 
 class ENFRChoiceFormatter(PromptFormatter):
     translate_context = True
+    explanation_instructions = None
 
-    def __init__(self, translate_context: bool):
+    def __init__(self, translate_context: bool=False, explanation_instructions:str=None):
         self.translate_context = translate_context
+        self.explanation_instructions = explanation_instructions
 
     def format(self, example: ComparisonExample, shuffle=True) -> dict:
         """
         Returns a formatted prompt with the position of the correct sentence (1 or 2).
         """
-        context = f"The context translated in French is '{example.trg_correct.pre}'" if self.translate_context else ""
-        ret = f"""
-        You will decide which of two translations from English to French is the most correct one.
-        The context of the source sentence is '{example.src.pre}'
-        The source sentence is '{example.src.sen}'
-        {context}
-        Which of the following translations is correct? MAKE SURE you only answer with the following manner:
-        START,choice=(1 or 2),END
-        """
 
+        context = f"The context translated in French is '{example.trg_correct.pre}'" if self.translate_context else ""
         order = random.randint(1, 2) if shuffle else 1
+        choices = ""
         if order == 1:
-            ret += f"""
+            choices += f"""
             1. '{example.trg_correct.sen}'
             2. '{example.trg_incorrect.sen}' 
             """
         else:
-            ret += f"""
+            choices += f"""
             1. '{example.trg_incorrect.sen}'
             2. '{example.trg_correct.sen}' 
             """
 
-        ret = textwrap.dedent(ret)
+        prompt = f"""
+        You will decide which of two translations from English to French is the most correct one.
+        The context of the source sentence is '{example.src.pre}'
+        The source sentence is '{example.src.sen}'
+        {context}
+        Which of the following translations is correct?
+        {choices}
+        {"" if self.explanation_instructions is None else self.explanation_instructions}
+        MAKE SURE you only answer in the following manner:
+        START,choice=(1 or 2),{"" if self.explanation_instructions is None else "explanation=(your explanation),"}END
+        """
+
+        prompt = textwrap.dedent(prompt)
         return {
             "true": order,
-            "prompts" : [ret]
+            "prompts" : [prompt]
         }
     
 class ENFRAffirmationFormatter(PromptFormatter):
