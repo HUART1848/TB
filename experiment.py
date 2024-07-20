@@ -1,5 +1,6 @@
 import itertools
 import json
+import os
 import re
 import tiktoken
 
@@ -10,6 +11,7 @@ from sklearn.metrics import accuracy_score, confusion_matrix
 from tacos.data import *
 from tacos.prompt import *
 from tacos.model import *
+from tacos.utils import *
 from tqdm import tqdm
 
 def get_completion(
@@ -102,28 +104,18 @@ def f2():
 
     print(accuracy_score(trues, preds))
 
-def params_product(**params):
-    keys = params.keys()
-    for instance in itertools.product(*params.values()):
-        yield dict(zip(keys, instance))
-
-def append_to_file(filename: str, content: str):
-    with open(filename, "a") as f:
-        f.write(content)
-
-def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Model, save_outputs=None):
+def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Model, save_outputs=None, max_tokens: None | int=None):
     trues = []
     preds = []
     
-    for example in tqdm(testset.examples):
-        res = fmt.format(example)
+    for pair in tqdm(testset.pairs):
+        res = fmt.format(pair)
         prompt = res["prompts"][0]
         trues.append(res["true"])
-        output = model.get_completion(prompt=prompt, max_tokens=None)["choices"][0]["message"]["content"]
-
+        output = model.get_completion(prompt=prompt, max_tokens=max_tokens)["choices"][0]["message"]["content"]
         pred = 0
         try:
-            matched = re.search(r"choice=(\d+)", output)
+            matched = re.search(r"choice:\s*(\d+)", output)
             pred = 0 if matched is None else int(matched.group(1))
         except ValueError:
             pass
@@ -145,8 +137,8 @@ def comparison_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model: Mod
 def likelihood_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model, tokenizer):
     trues = []
     preds = []
-    for example in tqdm(testset.examples):
-        res = fmt.format(example=example)
+    for example in tqdm(testset.pairs):
+        res = fmt.format_user(example=example)
         a, b = res["prompts"][0], res["prompts"][1]
         trues.append(res["true"])
 
@@ -163,60 +155,89 @@ def likelihood_eval(testset: ComparisonTestSet, fmt: PromptFormatter, model, tok
 
     return accuracy_score(trues, preds)
 
-def comparison_experiments():
+def comparison_experiments(save_outputs: bool=True):
     models: list[Model] = [
-        MistralInstructModel(),
-        #Llama3InstructModel(),
+        #LlamaCPPModel("Mistral7BInstruct", "./models/mistral/mistral-7B-Instruct-Q4_K_M.gguf"),
+        LlamaCPPModel("Mistral8x7BInstruct", "./models/mistral/mistral-8x7B-Instruct-Q4_K_M.gguf")
     ]
 
     loader = DiscourseMTLoader()
     testsets = {
         "anaphora": loader.comparison_from_anaphora("./discourse-mt-test-sets/test-sets/anaphora.json"),
-        "lexical-choice": loader.comparison_from_lexical_choice("./discourse-mt-test-sets/test-sets/lexical-choice.json")
+        #"lexical-choice": loader.comparison_from_lexical_choice("./discourse-mt-test-sets/test-sets/lexical-choice.json")
     }
     
+    do_cross_params = False
     all_params = {
+        "anaphora": [
+            {
+                "translate_context": False,
+                "explanation_instructions": None,
+                "max_tokens": 4
+            },
+            {
+                "translate_context": False,
+                "explanation_instructions": "What does the pronoun refer to in the sentence you chose?",
+                "max_tokens": None
+            }
+        ]
+    }
+
+    all_params_cross = {
             "anaphora": {
                 "translate_context": [False],
                 "explanation_instructions": [
                     None,
-                    "What does the pronoun refers to in the sentence you chose?",
-                ]
+                    "What does the pronoun refer to in the sentence you chose?",
+                ],
+                "max_tokens": [4]
         },
             "lexical-choice": {
-                "translate_context": [False],
+                "translate_context": [False, True],
                 "explanation_instructions": [
+                    "For explanation purposes, write a short definition of each of the two words",
                     None,
-                    "Why did you not chose the other word?"
-                ]   
+                    "Why did you not choose the other word?",
+                    "For explanation purposes, write an example sentence for each one of the two words.",
+                ],
+                "max_tokens": [None, 32, 64]
         }
     }
 
-    timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
-    results_filename = f"""results-{timestamp}.json"""
+    if save_outputs:
+        timestamp = datetime.now().strftime("%Y-%m-%d-%H%M%S")
+        results_filename = f"""results-{timestamp}.json"""
+
+        try:
+            os.mkdir(timestamp)
+        except:
+            print("Could not create results dir")
+            exit(1)
 
     results = []
     for model in models:
         model.load(n_threads=96)
         for testsetname, testset in testsets.items():
-            params = all_params[testsetname]
-            for i, p in enumerate(params_product(**params)):
-                fmt = ENFRChoiceFormatter(**p)
+            params = params_product(**all_params_cross[testsetname]) if do_cross_params else all_params[testsetname]
+            for i, p in enumerate(params):
+                fmt = ENFRChoiceFormatter(translate_context=p["translate_context"], explanation_instructions=p["explanation_instructions"])
 
-                print(f"MODEL: {model.__class__.__name__}")
+                print(f"MODEL: {model.name}")
                 print(f"TESTSET: {testsetname}")
                 print(f"FMT: {fmt.__class__.__name__}")
                 print(f"PARAMS:")
                 pprint(p)
 
-                metadata_filename = f"""outputs-{model.__class__.__name__}-{testsetname}-{timestamp}-metadata.jsonl"""
-                append_to_file(metadata_filename, json.dumps({"id": i, "params": p}) + "\n")
+                outputs_filename = None
+                if save_outputs:
+                    metadata_filename = os.path.join(timestamp, f"""outputs-{model.name}-{testsetname}-{timestamp}-metadata.jsonl""")
+                    append_to_file(metadata_filename, json.dumps({"id": i, "params": p}) + "\n")
 
-                outputs_filename = f"""outputs-{model.__class__.__name__}-{testsetname}-{timestamp}-{i}.jsonl"""
-                trues, preds = comparison_eval(testset, fmt, model, save_outputs=outputs_filename)
+                    outputs_filename = os.path.join(timestamp, f"""outputs-{model.name}-{testsetname}-{timestamp}-{i}.jsonl""")
+                trues, preds = comparison_eval(testset, fmt, model, max_tokens=p["max_tokens"], save_outputs=outputs_filename)
 
                 result = {
-                    "model": model.__class__.__name__,
+                    "model": model.name,
                     "testset": testsetname,
                     "params": p,
                     "accuracy": accuracy_score(trues, preds),
