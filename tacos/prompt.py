@@ -2,10 +2,10 @@ import json
 import random
 import textwrap
 
-from tacos.data import ComparisonExample, ComparisonTestSet
+from tacos.data import ComparisonPair, ComparisonTestSet
 
 class PromptFormatter():
-    def format(self, example: ComparisonExample) -> dict:
+    def format(self, example: ComparisonPair) -> dict:
         """
         Returns a dict of shape {"true": ..., "prompts": [...]}.
         true is the 1-indexed position of the correct answer in the prompt(s)
@@ -21,7 +21,7 @@ class ENFRChoiceFormatter(PromptFormatter):
         self.translate_context = translate_context
         self.explanation_instructions = explanation_instructions
 
-    def format(self, example: ComparisonExample, shuffle=True) -> dict:
+    def format(self, example: ComparisonPair, shuffle: bool=True, with_example: bool=False) -> dict:
         """
         Returns a formatted prompt with the position of the correct sentence (1 or 2).
         """
@@ -49,7 +49,8 @@ class ENFRChoiceFormatter(PromptFormatter):
         {choices}
         {"" if self.explanation_instructions is None else self.explanation_instructions}
         MAKE SURE you only answer in the following manner:
-        START,choice=(1 or 2),{"" if self.explanation_instructions is None else "explanation=(your explanation),"}END
+        {"" if self.explanation_instructions is None else "explanation: (your explanation)"}
+        choice: (1 or 2) END
         """
 
         prompt = textwrap.dedent(prompt)
@@ -64,7 +65,7 @@ class ENFRAffirmationFormatter(PromptFormatter):
     def __init__(self, translate_context: bool):
         self.translate_context = translate_context
 
-    def format(self, example: ComparisonExample) -> dict:
+    def format_user(self, example: ComparisonPair) -> dict:
         """
         Returns two formatted prompts for likelihood evaluation.
         The first prompt corresponds to the correct assessment. 
@@ -107,7 +108,7 @@ class OpenAIBatchPromptFormatter(BatchPromptFormatter):
         prompts = list()
         batch = ""
         for i, example in enumerate(testset.examples):
-            res = self.fmt.format(example)
+            res = self.fmt.format_user(example)
             prompts.append(res)
 
             for j, p in enumerate(res["prompts"]):
