@@ -9,7 +9,7 @@ class ContextSentence():
         self.pre = pre
         self.sen = sen
 
-class ComparisonExample():
+class ComparisonPair():
     src: ContextSentence
     trg_correct: ContextSentence
     trg_incorrect: ContextSentence
@@ -25,20 +25,20 @@ class ComparisonExample():
 class ComparisonTestSet():
     src_lang: str = ...
     trg_lang: str = ...
-    examples: list[ComparisonExample] = ...
+    pairs: list[ComparisonPair] = ...
 
     def __init__(self, src_lang: str, trg_lang: str):
         self.src_lang = src_lang
         self.trg_lang = trg_lang
-        self.examples = list()
+        self.pairs = list()
 
-    def add_example(self, example: ComparisonExample):
-        self.examples.append(example)
+    def add_example(self, pair: ComparisonPair):
+        self.pairs.append(pair)
 
     def to_dict(self) -> list[dict]:
         ret = list()
 
-        for example in self.examples:
+        for example in self.pairs:
             ret.append({
                 "src_pre": example.src.pre,
                 "src_sen": example.src.sen,
@@ -51,9 +51,8 @@ class ComparisonTestSet():
         return ret
     
 class TestSetLoader():
-    def comparison_from_anaphora(self, path: str) -> ComparisonTestSet:
-        ...
-
+    ...
+    
 class DiscourseMTLoader(TestSetLoader):
     SRC_TAG = "src"
     TRG_TAG = "trg"
@@ -73,7 +72,7 @@ class DiscourseMTLoader(TestSetLoader):
                 for trg in raw[i][self.TRG_TAG]:
                     correct_tag = self.CORRECT_TAG if self.CORRECT_TAG in trg.keys() else self.SEMI_CORRECT_TAG
 
-                    example = ComparisonExample(
+                    example = ComparisonPair(
                         ContextSentence(src_pre, src_sen),
                         ContextSentence(trg[correct_tag][0], trg[correct_tag][1]),
                         ContextSentence(trg[self.INCORRECT_TAG][0], trg[self.INCORRECT_TAG][1]),
@@ -95,7 +94,7 @@ class DiscourseMTLoader(TestSetLoader):
 
                     trg = e[self.TRG_TAG]
                     correct_tag = self.CORRECT_TAG
-                    example = ComparisonExample(
+                    example = ComparisonPair(
                         ContextSentence(src_pre, src_sen),
                         ContextSentence(trg[correct_tag][0], trg[correct_tag][1]),
                         ContextSentence(trg[self.INCORRECT_TAG][0], trg[self.INCORRECT_TAG][1]),
