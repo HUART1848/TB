@@ -13,14 +13,17 @@ class ComparisonPair():
     src: ContextSentence
     trg_correct: ContextSentence
     trg_incorrect: ContextSentence
+    metadata: None | dict
 
     def __init__(self,
                  src: ContextSentence,
                  trg_correct: ContextSentence,
-                 trg_incorrect: ContextSentence):
+                 trg_incorrect: ContextSentence,
+                 metadata = None):
         self.src = src
         self.trg_correct = trg_correct
         self.trg_incorrect = trg_incorrect
+        self.metadata = metadata
 
 class ComparisonTestSet():
     src_lang: str = ...
@@ -76,6 +79,10 @@ class DiscourseMTLoader(TestSetLoader):
                         ContextSentence(src_pre, src_sen),
                         ContextSentence(trg[correct_tag][0], trg[correct_tag][1]),
                         ContextSentence(trg[self.INCORRECT_TAG][0], trg[self.INCORRECT_TAG][1]),
+                        metadata={
+                            "id": i,
+                            "type": trg["type"]
+                        }
                     )
 
                     ret.add_example(example)
@@ -98,6 +105,10 @@ class DiscourseMTLoader(TestSetLoader):
                         ContextSentence(src_pre, src_sen),
                         ContextSentence(trg[correct_tag][0], trg[correct_tag][1]),
                         ContextSentence(trg[self.INCORRECT_TAG][0], trg[self.INCORRECT_TAG][1]),
+                        metadata={
+                            "id": i,
+                            "type": raw[i]["type"]
+                        }
                     )
 
                     ret.add_example(example)

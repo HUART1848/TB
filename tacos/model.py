@@ -32,3 +32,14 @@ class LlamaCPPModel(Model):
         
         messages = [{"role": "user", "content": prompt}]
         return self.model.create_chat_completion(messages=messages, max_tokens=max_tokens, stop=stop)
+
+    def get_completion_json(self, prompt: str, schema: dict) -> str:
+        if self.model is None:
+            raise RuntimeError(f"Model {self.name} at {self.model_path} is not loaded")
+
+        messages = [{"role": "user", "content": prompt}]
+        response_format = {
+            "type": "json_object", 
+            "schema": schema
+        }
+        return self.model.create_chat_completion(messages=messages, response_format=response_format, max_tokens=None)

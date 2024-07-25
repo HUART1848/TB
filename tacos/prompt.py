@@ -14,14 +14,14 @@ class PromptFormatter():
         ...
 
 class ENFRChoiceFormatter(PromptFormatter):
-    translate_context = True
-    explanation_instructions = None
+    translate_context: bool = ...
+    explanation_instructions: None|str = ...
 
-    def __init__(self, translate_context: bool=False, explanation_instructions:str=None):
+    def __init__(self, translate_context: bool=False, explanation_instructions: None|str=None):
         self.translate_context = translate_context
         self.explanation_instructions = explanation_instructions
 
-    def format(self, example: ComparisonPair, shuffle: bool=True, with_example: bool=False) -> dict:
+    def format(self, example: ComparisonPair, shuffle: bool=True) -> dict:
         """
         Returns a formatted prompt with the position of the correct sentence (1 or 2).
         """
@@ -59,6 +59,66 @@ class ENFRChoiceFormatter(PromptFormatter):
             "prompts" : [prompt]
         }
     
+class ENFRChoiceFormatterJSON(PromptFormatter):
+    translate_context: bool = ...
+    explanation_instructions: None | str = ...
+
+    def __init__(self, translate_context: bool=False, explanation_instructions:None|str=None):
+        self.translate_context = translate_context
+        self.explanation_instructions = explanation_instructions
+
+    def format(self, example: ComparisonPair, shuffle: bool=True) -> dict:
+        context = f"The context translated in French is '{example.trg_correct.pre}'" if self.translate_context else ""
+        order = random.randint(1, 2) if shuffle else 1
+        choices = ""
+        if order == 1:
+            choices = f"""
+            1. '{example.trg_correct.sen}'
+            2. '{example.trg_incorrect.sen}' 
+            """
+        else:
+            choices = f"""
+            1. '{example.trg_incorrect.sen}'
+            2. '{example.trg_correct.sen}' 
+            """
+
+        prompt = f"""
+        You will decide which of two translations from English to French is the most correct one.
+        The context of the source sentence is '{example.src.pre}'
+        The source sentence is '{example.src.sen}'
+        {context}
+        Which of the following translations is correct?
+        {choices}
+        {self.explanation_instructions if self.explanation_instructions is not None else ""}
+        Answer as json with the field "choice": (1 or 2)"""
+
+        schema = {}
+        if self.explanation_instructions is None:
+            schema = {
+                "type": "object",
+                "properties": {
+                    "choice": {"type": "number"},
+                },
+                "required": ["choice"]
+            }
+        else:
+            prompt += """ and the field "explanation" containing your explanation"""
+            schema = {
+                "type": "object",
+                "properties": {
+                    "explanation": {"type": "string"},
+                    "choice": {"type": "number"}
+                },
+                "required": ["explanation", "choice"]
+            }
+
+        prompt = textwrap.dedent(prompt)
+        return {
+            "true": order,
+            "prompts": [prompt],
+            "schema": schema
+        }
+
 class ENFRAffirmationFormatter(PromptFormatter):
     translate_context = True
 
